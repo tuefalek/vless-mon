@@ -254,6 +254,16 @@ def _parse(uri: str, name: str) -> dict[str, Any]:
             "path": unquote(p("path", "/")),
             "host": p("host", host),
         }
+    elif network == "xhttp":
+        proxy["network"] = "xhttp"
+        xhttp: dict[str, Any] = {"path": unquote(p("path", "/"))}
+        xhttp_host = p("host", host)
+        if xhttp_host:
+            xhttp["host"] = xhttp_host
+        mode = p("mode", "")
+        if mode:
+            xhttp["mode"] = mode
+        proxy["xhttp-settings"] = xhttp
     # tcp / kcp / quic — no extra opts needed
 
     return proxy
