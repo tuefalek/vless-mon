@@ -1,0 +1,59 @@
+[Unit]
+Description=VLESS Server Monitor (asyncio daemon)
+Documentation=https://github.com/yourorg/vless-mon
+# Start after the network stack is fully up and Mihomo is running
+After=network-online.target mihomo.service
+Wants=network-online.target
+# If Mihomo restarts we want to restart too so the proxy list is re-synced
+BindsTo=mihomo.service
+
+[Service]
+Type=simple
+User=vless-mon
+Group=vless-mon
+
+WorkingDirectory=/opt/vless-mon
+
+# Load all config from the .env file (values are NOT shell-expanded here,
+# so quote characters inside values are taken literally — use plain values)
+EnvironmentFile=/opt/vless-mon/.env
+
+ExecStart=/opt/vless-mon/venv/bin/python -m vless_mon
+
+# Give the daemon time to flush DB and close HTTP sessions on stop
+TimeoutStopSec=30
+KillMode=mixed
+KillSignal=SIGTERM
+
+Restart=on-failure
+RestartSec=10
+StartLimitBurst=5
+StartLimitIntervalSec=120
+
+# Redirect stdout/stderr to the journal; loguru also writes to LOG_FILE
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=vless-mon
+
+# ── Hardening ────────────────────────────────────────────────────────────────
+NoNewPrivileges=yes
+PrivateTmp=yes
+# Daemon only needs to write to its own data/log dirs and the Mihomo config dir
+ProtectSystem=strict
+ReadWritePaths=/var/lib/vless-mon /var/log/vless-mon /etc/mihomo
+ProtectHome=yes
+# Outbound network only — no need to bind ports
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+ProtectClock=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,27 @@
+# Environment — never commit secrets
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Runtime data
+*.db
+*.db-shm
+*.db-wal
+*.log
+*.log.gz
+
+# IDE
+.idea/
+.vscode/
+*.swp
