@@ -10,6 +10,7 @@ from loguru import logger
 from .bot import TelegramBot
 from .config import Config
 from .database import Database
+from .http_debug import make_trace_config
 from .mihomo import MihomoClient, MihomoConfigManager
 from .monitor import Monitor
 from .subscription import fetch_subscription
@@ -31,8 +32,9 @@ class VlessMonDaemon:
     async def run(self) -> None:
         logger.info("VLESS monitor daemon starting")
 
-        self._session = aiohttp.ClientSession()
-        self._tg_session = self._make_tg_session()
+        traces = [make_trace_config()] if self._cfg.debug else []
+        self._session = aiohttp.ClientSession(trace_configs=traces)
+        self._tg_session = self._make_tg_session(traces)
         mihomo = MihomoClient(self._cfg, self._session)
         telegram = TelegramNotifier(self._cfg, self._tg_session)
         cfg_mgr = MihomoConfigManager(self._cfg)
@@ -73,14 +75,14 @@ class VlessMonDaemon:
 
         await self._shutdown()
 
-    def _make_tg_session(self) -> aiohttp.ClientSession:
+    def _make_tg_session(self, traces: list) -> aiohttp.ClientSession:
         proxy_url = self._cfg.telegram_socks_proxy
         if proxy_url:
             connector = ProxyConnector.from_url(proxy_url, rdns=True)
             logger.info(f"Telegram session: SOCKS proxy {proxy_url}")
         else:
             connector = aiohttp.TCPConnector()
-        return aiohttp.ClientSession(connector=connector)
+        return aiohttp.ClientSession(connector=connector, trace_configs=traces)
 
     def request_stop(self) -> None:
         """Called from signal handlers to trigger graceful shutdown."""

@@ -51,6 +51,8 @@ class Config:
     db_path: str
     log_level: str
     log_file: str
+    # When True: force log_level=DEBUG and attach HTTP request/response tracer
+    debug: bool
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -79,4 +81,5 @@ class Config:
             db_path=os.getenv("DB_PATH", "/var/lib/vless-mon/vless_mon.db"),
             log_level=os.getenv("LOG_LEVEL", "INFO"),
             log_file=os.getenv("LOG_FILE", "/var/log/vless-mon/vless-mon.log"),
+            debug=os.getenv("DEBUG", "false").lower() in ("1", "true", "yes"),
         )

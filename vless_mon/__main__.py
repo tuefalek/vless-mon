@@ -32,7 +32,10 @@ def _setup_logging(level: str, log_file: str) -> None:
 
 async def _async_main() -> None:
     config = Config.from_env()
-    _setup_logging(config.log_level, config.log_file)
+    level = "DEBUG" if config.debug else config.log_level
+    _setup_logging(level, config.log_file)
+    if config.debug:
+        logger.warning("DEBUG mode enabled — all HTTP requests/responses will be logged")
 
     daemon = VlessMonDaemon(config)
 
