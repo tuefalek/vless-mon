@@ -19,12 +19,14 @@ class TelegramBot:
         self,
         token: str,
         allowed_chat_id: str,
+        admin_ids: frozenset[int],
         session: aiohttp.ClientSession,
         db: Database,
         mihomo: MihomoClient,
     ) -> None:
         self._token = token
         self._allowed_chat = allowed_chat_id
+        self._admin_ids = admin_ids
         self._session = session
         self._db = db
         self._mihomo = mihomo
@@ -39,7 +41,10 @@ class TelegramBot:
         if not self._token:
             logger.info("Bot polling skipped (TELEGRAM_BOT_TOKEN not set)")
             return
-        logger.info("Telegram bot polling started")
+        if self._admin_ids:
+            logger.info(f"Bot polling started — admin IDs: {sorted(self._admin_ids)}")
+        else:
+            logger.warning("Bot polling started — TELEGRAM_ADMIN_IDS not set, all users in chat can run commands")
         while True:
             try:
                 updates = await self._get_updates()
@@ -101,6 +106,11 @@ class TelegramBot:
         chat_id = str(msg.get("chat", {}).get("id", ""))
         if self._allowed_chat and chat_id != self._allowed_chat:
             logger.debug(f"Ignoring message from unauthorized chat {chat_id}")
+            return
+
+        sender_id: int = msg.get("from", {}).get("id", 0)
+        if self._admin_ids and sender_id not in self._admin_ids:
+            logger.debug(f"Ignoring command from non-admin user {sender_id}")
             return
 
         text: str = msg.get("text", "")

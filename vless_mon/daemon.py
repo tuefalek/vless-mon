@@ -40,6 +40,7 @@ class VlessMonDaemon:
         bot = TelegramBot(
             token=self._cfg.telegram_bot_token,
             allowed_chat_id=str(self._cfg.telegram_chat_id),
+            admin_ids=self._cfg.telegram_admin_ids,
             session=self._tg_session,
             db=self._db,
             mihomo=mihomo,

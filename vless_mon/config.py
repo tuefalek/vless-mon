@@ -6,6 +6,18 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def _parse_ids(raw: str) -> frozenset[int]:
+    result: set[int] = set()
+    for part in raw.split(","):
+        part = part.strip()
+        if part:
+            try:
+                result.add(int(part))
+            except ValueError:
+                pass
+    return frozenset(result)
+
+
 @dataclass(frozen=True)
 class Config:
     # Mihomo API
@@ -18,6 +30,9 @@ class Config:
     # Telegram
     telegram_bot_token: str
     telegram_chat_id: str
+    # Comma-separated Telegram user IDs allowed to send bot commands.
+    # Empty → no restriction (any user in the chat can run commands).
+    telegram_admin_ids: frozenset[int]
     # Optional SOCKS5/SOCKS4 proxy for outbound Telegram requests.
     # Format: socks5://user:pass@host:port  or  socks5://host:port
     telegram_socks_proxy: str
@@ -51,6 +66,7 @@ class Config:
             ),
             telegram_bot_token=os.getenv("TELEGRAM_BOT_TOKEN", ""),
             telegram_chat_id=os.getenv("TELEGRAM_CHAT_ID", ""),
+            telegram_admin_ids=_parse_ids(os.getenv("TELEGRAM_ADMIN_IDS", "")),
             telegram_socks_proxy=os.getenv("TELEGRAM_SOCKS_PROXY", ""),
             subscription_url=os.getenv("SUBSCRIPTION_URL", ""),
             subscription_interval=int(os.getenv("SUBSCRIPTION_INTERVAL", "1800")),
