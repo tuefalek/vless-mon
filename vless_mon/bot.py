@@ -115,9 +115,11 @@ class TelegramBot:
             return
 
         text: str = msg.get("text", "")
-        # Accept "/check" and "/check@botname"
-        if text.split("@")[0].strip() == "/check":
+        cmd = text.split("@")[0].strip()
+        if cmd == "/check":
             await self._cmd_check(chat_id, msg.get("message_id"))
+        elif cmd == "/reset":
+            await self._cmd_reset(chat_id, msg.get("message_id"))
 
     # ------------------------------------------------------------------
     # /check command
@@ -205,6 +207,19 @@ class TelegramBot:
         report = "\n".join(lines)
         for chunk in _split(report):
             await self._send(chat_id, chunk)
+
+    # ------------------------------------------------------------------
+    # /reset command
+    # ------------------------------------------------------------------
+
+    async def _cmd_reset(self, chat_id: str, reply_to: int | None) -> None:
+        count = await self._db.reset()
+        await self._send(
+            chat_id,
+            f"🗑 Database cleared: <b>{count}</b> server(s) deleted.\n"
+            "Restart the daemon to re-sync the subscription.",
+            reply_to,
+        )
 
     # ------------------------------------------------------------------
     # Send helper

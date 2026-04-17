@@ -92,32 +92,57 @@ class Database:
     # Writes
     # ------------------------------------------------------------------
 
-    async def upsert_server(self, server: Server) -> bool:
-        """Insert new server or reactivate+update existing one.
-
-        Returns True when a brand-new row was inserted.
-        """
+    async def upsert_server(self, server: Server) -> str:
+        """Insert or update a server. Returns 'new' | 'renamed' | 'exists'."""
+        # 1. Exact name match
         async with self._conn.execute(
-            "SELECT id, active FROM servers WHERE name = ?", (server.name,)
+            "SELECT id FROM servers WHERE name = ?", (server.name,)
         ) as cur:
             row = await cur.fetchone()
 
-        if row is None:
+        if row is not None:
             await self._conn.execute(
-                "INSERT INTO servers (name, address, port, raw_uri) VALUES (?, ?, ?, ?)",
-                (server.name, server.address, server.port, server.raw_uri),
+                "UPDATE servers SET address = ?, port = ?, raw_uri = ?, active = 1 WHERE name = ?",
+                (server.address, server.port, server.raw_uri, server.name),
             )
             await self._conn.commit()
-            logger.debug(f"New server added to DB: {server.name}")
-            return True
+            return "exists"
 
-        # Server already exists — update mutable fields and ensure active
+        # 2. Same address+port — server was renamed in subscription
+        async with self._conn.execute(
+            "SELECT id, name FROM servers WHERE address = ? AND port = ?",
+            (server.address, server.port),
+        ) as cur:
+            row = await cur.fetchone()
+
+        if row is not None:
+            old_name = row["name"]
+            await self._conn.execute(
+                "UPDATE servers SET name = ?, raw_uri = ?, active = 1 WHERE id = ?",
+                (server.name, server.raw_uri, row["id"]),
+            )
+            await self._conn.commit()
+            logger.info(f"Server renamed in DB: '{old_name}' → '{server.name}'")
+            return "renamed"
+
+        # 3. Truly new server
         await self._conn.execute(
-            "UPDATE servers SET address = ?, port = ?, raw_uri = ?, active = 1 WHERE name = ?",
-            (server.address, server.port, server.raw_uri, server.name),
+            "INSERT INTO servers (name, address, port, raw_uri) VALUES (?, ?, ?, ?)",
+            (server.name, server.address, server.port, server.raw_uri),
         )
         await self._conn.commit()
-        return False
+        logger.debug(f"New server added to DB: {server.name}")
+        return "new"
+
+    async def reset(self) -> int:
+        """Delete all servers and check results. Returns number of servers deleted."""
+        async with self._conn.execute("SELECT COUNT(*) FROM servers") as cur:
+            count = (await cur.fetchone())[0]
+        await self._conn.execute("DELETE FROM servers")
+        await self._conn.execute("DELETE FROM check_results")
+        await self._conn.commit()
+        logger.warning(f"Database reset: {count} servers and all check results deleted")
+        return count
 
     async def update_server_status(
         self,

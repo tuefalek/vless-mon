@@ -189,21 +189,25 @@ class VlessMonDaemon:
             return
 
         new_count = 0
+        renamed_count = 0
         for srv in servers:
-            is_new = await self._db.upsert_server(srv)
-            if is_new:
+            result = await self._db.upsert_server(srv)
+            if result == "new":
                 new_count += 1
+            elif result == "renamed":
+                renamed_count += 1
 
-        if new_count > 0 or not cfg_mgr.provider_path.exists():
-            logger.info(f"Subscription sync: {new_count} new server(s) discovered")
+        needs_reload = new_count > 0 or renamed_count > 0 or not cfg_mgr.provider_path.exists()
+        if needs_reload:
+            logger.info(
+                f"Subscription sync: {new_count} new, {renamed_count} renamed"
+            )
             all_active = await self._db.get_active_servers()
             changed = cfg_mgr.write_proxies(all_active)
             if changed:
-                # Reload the proxy-provider so Mihomo exposes new nodes for
-                # /proxies/{name}/delay without a full restart.
                 await mihomo.reload_provider(self._cfg.mihomo_provider_name)
         else:
-            logger.info("Subscription sync: no new servers")
+            logger.info("Subscription sync: no changes")
 
     # ------------------------------------------------------------------
     # Cleanup
