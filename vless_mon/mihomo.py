@@ -53,8 +53,31 @@ class MihomoClient:
             logger.debug(f"check_delay({node_name!r}): {exc}")
             return None
 
-    async def reload_provider(self, provider_name: str) -> None:
-        """Force Mihomo to re-read a proxy-provider file."""
+    async def list_proxy_names(self) -> set[str]:
+        """Return the names of all proxies currently known to Mihomo."""
+        url = f"{self._base}/proxies"
+        try:
+            async with self._session.get(
+                url,
+                headers=self._headers,
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as resp:
+                data = await resp.json(content_type=None)
+                proxies: dict = data.get("proxies", {})
+                # Exclude Mihomo's built-in meta-nodes (DIRECT, REJECT, …)
+                return {
+                    name for name in proxies
+                    if not name.upper().startswith(("DIRECT", "REJECT", "GLOBAL", "COMPAT"))
+                }
+        except Exception as exc:
+            logger.error(f"list_proxy_names failed: {exc}")
+            return set()
+
+    async def reload_provider(self, provider_name: str) -> bool:
+        """Force Mihomo to re-read a proxy-provider file.
+
+        Returns True on success so callers can decide on a fallback.
+        """
         url = f"{self._base}/providers/proxies/{provider_name}"
         try:
             async with self._session.put(
@@ -64,13 +87,20 @@ class MihomoClient:
             ) as resp:
                 if resp.status in (200, 204):
                     logger.info(f"Proxy provider '{provider_name}' reloaded")
-                else:
-                    body = await resp.text()
-                    logger.warning(
-                        f"reload_provider returned {resp.status}: {body[:200]}"
+                    return True
+                body = await resp.text()
+                if resp.status == 404:
+                    logger.error(
+                        f"Provider '{provider_name}' not found in Mihomo (404). "
+                        "Add a proxy-providers entry to your Mihomo config.yaml — "
+                        "see DEPLOY.md for the required snippet."
                     )
+                else:
+                    logger.warning(f"reload_provider returned {resp.status}: {body[:200]}")
+                return False
         except Exception as exc:
             logger.error(f"reload_provider failed: {exc}")
+            return False
 
     async def reload_config(self, config_path: str, *, force: bool = True) -> None:
         """Reload the entire Mihomo configuration (PUT /configs)."""

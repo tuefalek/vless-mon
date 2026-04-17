@@ -54,6 +54,18 @@ class VlessMonDaemon:
         # Mihomo has the full proxy list from the very first check cycle.
         await self._sync_subscription(cfg_mgr, mihomo)
 
+        # Always force-reload the provider on startup so Mihomo has our proxy
+        # list even after it was restarted independently of this daemon.
+        if cfg_mgr.provider_path.exists():
+            await mihomo.reload_provider(self._cfg.mihomo_provider_name)
+        else:
+            logger.warning(
+                f"Provider file not found: {cfg_mgr.provider_path}. "
+                "No subscription fetched yet or wrong MIHOMO_PROVIDER_PATH."
+            )
+
+        await self._startup_diagnostics(mihomo)
+
         tasks = [
             asyncio.create_task(
                 self._monitor_loop(monitor), name="monitor-loop"
@@ -88,6 +100,46 @@ class VlessMonDaemon:
         """Called from signal handlers to trigger graceful shutdown."""
         logger.info("Stop requested via signal")
         self._stop.set()
+
+    # ------------------------------------------------------------------
+    # Startup diagnostics
+    # ------------------------------------------------------------------
+
+    async def _startup_diagnostics(self, mihomo: MihomoClient) -> None:
+        db_servers = await self._db.get_active_servers()
+        db_names = {s.name for s in db_servers}
+        mihomo_names = await mihomo.list_proxy_names()
+
+        matched = db_names & mihomo_names
+        missing = db_names - mihomo_names
+        extra = mihomo_names - db_names
+
+        logger.info(
+            f"Diagnostics: DB={len(db_names)} | Mihomo={len(mihomo_names)} | "
+            f"matched={len(matched)} | missing_in_mihomo={len(missing)} | "
+            f"extra_in_mihomo={len(extra)}"
+        )
+        if missing:
+            samples = sorted(missing)[:5]
+            dots = "…" if len(missing) > 5 else ""
+            logger.error(
+                f"These {len(missing)} DB proxies are UNKNOWN to Mihomo: "
+                f"{samples}{dots}"
+            )
+            logger.error(
+                f"Fix: add proxy-providers.{self._cfg.mihomo_provider_name} to "
+                f"Mihomo config.yaml pointing to {self._cfg.mihomo_provider_path}, "
+                "then reload Mihomo."
+            )
+        if extra:
+            samples = sorted(extra)[:5]
+            dots = "…" if len(extra) > 5 else ""
+            logger.info(
+                f"Mihomo has {len(extra)} proxies not in our DB (from other providers): "
+                f"{samples}{dots}"
+            )
+        if matched:
+            logger.info(f"Ready to monitor {len(matched)} matched proxies.")
 
     # ------------------------------------------------------------------
     # Loops
