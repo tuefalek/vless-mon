@@ -7,6 +7,7 @@ import aiohttp
 from aiohttp_socks import ProxyConnector
 from loguru import logger
 
+from .bot import TelegramBot
 from .config import Config
 from .database import Database
 from .mihomo import MihomoClient, MihomoConfigManager
@@ -36,6 +37,13 @@ class VlessMonDaemon:
         telegram = TelegramNotifier(self._cfg, self._tg_session)
         cfg_mgr = MihomoConfigManager(self._cfg)
         monitor = Monitor(self._cfg, self._db, mihomo, telegram)
+        bot = TelegramBot(
+            token=self._cfg.telegram_bot_token,
+            allowed_chat_id=str(self._cfg.telegram_chat_id),
+            session=self._tg_session,
+            db=self._db,
+            mihomo=mihomo,
+        )
 
         await self._db.connect()
 
@@ -49,6 +57,9 @@ class VlessMonDaemon:
             ),
             asyncio.create_task(
                 self._subscription_loop(cfg_mgr, mihomo), name="subscription-loop"
+            ),
+            asyncio.create_task(
+                bot.run(), name="bot-polling"
             ),
         ]
 
