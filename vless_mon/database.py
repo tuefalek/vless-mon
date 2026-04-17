@@ -22,9 +22,22 @@ CREATE TABLE IF NOT EXISTS servers (
     fail_count       INTEGER NOT NULL DEFAULT 0,
     last_check       TEXT,
     last_alert_status TEXT,
+    ping_ms          INTEGER,
     active           INTEGER NOT NULL DEFAULT 1,
     created_at       TEXT    NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS check_results (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    server_name TEXT    NOT NULL,
+    checked_at  TEXT    NOT NULL,
+    mihomo_ms   INTEGER,
+    ping_ms     INTEGER,
+    status      TEXT    NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_check_results_server_time
+    ON check_results (server_name, checked_at);
 """
 
 
@@ -39,7 +52,18 @@ class Database:
         self._conn.row_factory = aiosqlite.Row
         await self._conn.executescript(_DDL)
         await self._conn.commit()
+        await self._migrate()
         logger.info(f"Database connected: {self._path}")
+
+    async def _migrate(self) -> None:
+        async with self._conn.execute("PRAGMA table_info(servers)") as cur:
+            cols = {row[1] for row in await cur.fetchall()}
+        if "ping_ms" not in cols:
+            await self._conn.execute(
+                "ALTER TABLE servers ADD COLUMN ping_ms INTEGER"
+            )
+            await self._conn.commit()
+            logger.info("DB migration: added servers.ping_ms column")
 
     async def close(self) -> None:
         if self._conn:
@@ -101,12 +125,28 @@ class Database:
         status: str,
         fail_count: int,
         last_alert_status: Optional[str],
+        ping_ms: Optional[int] = None,
     ) -> None:
         await self._conn.execute(
             """UPDATE servers
-               SET status = ?, fail_count = ?, last_check = ?, last_alert_status = ?
+               SET status = ?, fail_count = ?, last_check = ?,
+                   last_alert_status = ?, ping_ms = ?
                WHERE name = ?""",
-            (status, fail_count, _NOW(), last_alert_status, name),
+            (status, fail_count, _NOW(), last_alert_status, ping_ms, name),
+        )
+        await self._conn.commit()
+
+    async def insert_check_result(
+        self,
+        server_name: str,
+        mihomo_ms: Optional[int],
+        ping_ms: Optional[int],
+        status: str,
+    ) -> None:
+        await self._conn.execute(
+            """INSERT INTO check_results (server_name, checked_at, mihomo_ms, ping_ms, status)
+               VALUES (?, ?, ?, ?, ?)""",
+            (server_name, _NOW(), mihomo_ms, ping_ms, status),
         )
         await self._conn.commit()
 
@@ -126,5 +166,6 @@ def _row_to_server(row: aiosqlite.Row) -> Server:
         fail_count=row["fail_count"],
         last_check=row["last_check"],
         last_alert_status=row["last_alert_status"],
+        ping_ms=row["ping_ms"],
         active=bool(row["active"]),
     )

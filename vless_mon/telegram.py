@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Optional
+
 import aiohttp
 from loguru import logger
 
@@ -36,12 +38,25 @@ class TelegramNotifier:
         await self.send(
             f"\U0001f534 <b>VLESS DOWN</b>\n"
             f"Server: <code>{server_name}</code>\n"
-            f"Failed checks in a row: {fail_count}"
+            f"Host unreachable — failed checks: {fail_count}"
         )
 
-    async def alert_up(self, server_name: str, delay_ms: int) -> None:
+    async def alert_degraded(
+        self, server_name: str, fail_count: int, ping_ms: Optional[int]
+    ) -> None:
+        ping_str = f"{ping_ms}\u202fms" if ping_ms is not None else "—"
+        await self.send(
+            f"\U0001f7e1 <b>VLESS DEGRADED</b>\n"
+            f"Server: <code>{server_name}</code>\n"
+            f"Mihomo failed ({fail_count} checks) | ping: {ping_str}"
+        )
+
+    async def alert_up(
+        self, server_name: str, delay_ms: int, ping_ms: Optional[int]
+    ) -> None:
+        ping_str = f"{ping_ms}\u202fms" if ping_ms is not None else "—"
         await self.send(
             f"\U0001f7e2 <b>VLESS UP</b>\n"
             f"Server: <code>{server_name}</code>\n"
-            f"Delay: {delay_ms}\u202fms"
+            f"Delay: {delay_ms}\u202fms | ping: {ping_str}"
         )

@@ -10,6 +10,7 @@ from loguru import logger
 
 from .database import Database
 from .mihomo import MihomoClient
+from .monitor import tcp_ping
 
 _DIVIDER = "━" * 28
 
@@ -134,37 +135,70 @@ class TelegramBot:
             reply_to,
         )
 
-        delays = await asyncio.gather(
-            *[self._mihomo.check_delay(s.name) for s in servers],
+        checks = await asyncio.gather(
+            *[
+                asyncio.gather(
+                    self._mihomo.check_delay(s.name),
+                    tcp_ping(s.address, s.port),
+                )
+                for s in servers
+            ],
             return_exceptions=True,
         )
 
-        rows: list[tuple[str, int | None]] = []
-        for srv, result in zip(servers, delays):
-            d = result if isinstance(result, int) else None
-            rows.append((srv.name, d))
+        # Each entry: (name, mihomo_ms | None, ping_ms | None)
+        rows: list[tuple[str, int | None, int | None]] = []
+        for srv, result in zip(servers, checks):
+            if isinstance(result, BaseException):
+                rows.append((srv.name, None, None))
+            else:
+                mihomo_ms, ping_ms = result
+                mihomo_ms = mihomo_ms if isinstance(mihomo_ms, int) else None
+                rows.append((srv.name, mihomo_ms, ping_ms))
 
-        # Sort: UP servers by delay ascending, then DOWN
-        rows.sort(key=lambda r: (r[1] is None, r[1] or 0))
+        # Sort: up first (by delay), then degraded (by ping), then down
+        def _sort_key(r: tuple[str, int | None, int | None]) -> tuple[int, int]:
+            _, m, p = r
+            if m is not None:
+                return (0, m)
+            if p is not None:
+                return (1, p)
+            return (2, 0)
 
-        up_count = sum(1 for _, d in rows if d is not None)
-        down_count = len(rows) - up_count
+        rows.sort(key=_sort_key)
+
+        up_count = sum(1 for _, m, _ in rows if m is not None)
+        degraded_count = sum(1 for _, m, p in rows if m is None and p is not None)
+        down_count = sum(1 for _, m, p in rows if m is None and p is None)
 
         ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
         lines: list[str] = [
-            f"📊 <b>VLESS Server Status</b>",
+            "📊 <b>VLESS Server Status</b>",
             _DIVIDER,
         ]
-        for name, delay in rows:
+        for name, mihomo_ms, ping_ms in rows:
             safe = _esc(name)
-            if delay is not None:
-                lines.append(f"🟢 <code>{safe}</code>  —  {delay}\u202fms")
+            ping_str = f"{ping_ms}\u202fms" if ping_ms is not None else "—"
+            if mihomo_ms is not None:
+                lines.append(
+                    f"🟢 <code>{safe}</code>  —  {mihomo_ms}\u202fms | {ping_str}"
+                )
+            elif ping_ms is not None:
+                lines.append(
+                    f"🟡 <code>{safe}</code>  —  timeout | {ping_str}"
+                )
             else:
-                lines.append(f"🔴 <code>{safe}</code>  —  timeout")
+                lines.append(f"🔴 <code>{safe}</code>  —  offline")
+
+        summary_parts = [f"🟢 UP: <b>{up_count}</b>"]
+        if degraded_count:
+            summary_parts.append(f"🟡 DEGRADED: <b>{degraded_count}</b>")
+        summary_parts.append(f"🔴 DOWN: <b>{down_count}</b>")
+
         lines += [
             _DIVIDER,
-            f"✅ UP: <b>{up_count}</b>    ❌ DOWN: <b>{down_count}</b>",
+            "  ".join(summary_parts),
             f"🕐 {ts}",
         ]
 
