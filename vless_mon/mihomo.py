@@ -272,10 +272,13 @@ def _parse(uri: str, name: str) -> dict[str, Any]:
         extra_raw = p("extra", "")
         if extra_raw:
             try:
-                xhttp["extra"] = json.loads(unquote(extra_raw))
+                extra_obj = json.loads(unquote(extra_raw))
+                headers = extra_obj.get("headers")
+                if headers:
+                    xhttp["headers"] = headers
             except Exception:
                 pass
-        proxy["xhttp-settings"] = xhttp
+        proxy["xhttp-opts"] = xhttp
     # tcp / kcp / quic — no extra opts needed
 
     return proxy
