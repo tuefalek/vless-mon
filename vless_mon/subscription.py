@@ -12,8 +12,8 @@ from loguru import logger
 from .models import Server
 
 _VLESS_SCHEME = "vless://"
-# Characters not safe for use as Mihomo proxy names
-_UNSAFE_RE = re.compile(r"[^\w\-\. ()\u4e00-\u9fff]", re.UNICODE)
+# Strip only ASCII control characters — everything else (incl. emoji, CJK) is fine
+_UNSAFE_RE = re.compile(r"[\x00-\x1f\x7f]")
 
 
 async def fetch_subscription(

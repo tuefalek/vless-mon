@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import json
 from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import parse_qs, quote, unquote, urlparse
@@ -220,6 +221,8 @@ def _parse(uri: str, name: str) -> dict[str, Any]:
         alpn = p("alpn")
         if alpn:
             proxy["alpn"] = [a for a in alpn.split(",") if a]
+        if p("allowInsecure", "0") in ("1", "true"):
+            proxy["skip-cert-verify"] = True
 
     if security == "reality":
         proxy["reality-opts"] = {
@@ -256,13 +259,22 @@ def _parse(uri: str, name: str) -> dict[str, Any]:
         }
     elif network == "xhttp":
         proxy["network"] = "xhttp"
-        xhttp: dict[str, Any] = {"path": unquote(p("path", "/"))}
-        xhttp_host = p("host", host)
-        if xhttp_host:
-            xhttp["host"] = xhttp_host
+        raw_path = unquote(p("path", "/"))
+        xhttp: dict[str, Any] = {
+            "path": raw_path if raw_path.startswith("/") else "/" + raw_path
+        }
         mode = p("mode", "")
         if mode:
             xhttp["mode"] = mode
+        xhttp_host = p("host", host)
+        if xhttp_host:
+            xhttp["host"] = xhttp_host
+        extra_raw = p("extra", "")
+        if extra_raw:
+            try:
+                xhttp["extra"] = json.loads(unquote(extra_raw))
+            except Exception:
+                pass
         proxy["xhttp-settings"] = xhttp
     # tcp / kcp / quic — no extra opts needed
 
