@@ -4,7 +4,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 from typing import Any, Optional
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlparse
 
 import aiohttp
 import yaml
@@ -30,7 +30,8 @@ class MihomoClient:
 
     async def check_delay(self, node_name: str) -> Optional[int]:
         """Return round-trip delay (ms) if the node is reachable, else None."""
-        url = f"{self._base}/proxies/{node_name}/delay"
+        encoded = quote(node_name, safe="")
+        url = f"{self._base}/proxies/{encoded}/delay"
         params = {"timeout": self._timeout_ms, "url": self._check_url}
         # Give aiohttp a bit more headroom than Mihomo's own timeout
         total = self._timeout_ms / 1000 + 3
@@ -42,9 +43,14 @@ class MihomoClient:
                 timeout=aiohttp.ClientTimeout(total=total),
             ) as resp:
                 data = await resp.json(content_type=None)
-                return data.get("delay") or None
+                delay = data.get("delay")
+                if delay is None:
+                    logger.debug(
+                        f"check_delay({node_name!r}): HTTP {resp.status} — {data}"
+                    )
+                return delay or None
         except Exception as exc:
-            logger.debug(f"check_delay({node_name}): {exc}")
+            logger.debug(f"check_delay({node_name!r}): {exc}")
             return None
 
     async def reload_provider(self, provider_name: str) -> None:
