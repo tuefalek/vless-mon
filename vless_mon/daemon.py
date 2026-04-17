@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 
 import aiohttp
+from aiohttp_socks import ProxyConnector
 from loguru import logger
 
 from .config import Config
@@ -18,7 +19,8 @@ class VlessMonDaemon:
     def __init__(self, config: Config) -> None:
         self._cfg = config
         self._db = Database(config.db_path)
-        self._session: aiohttp.ClientSession | None = None
+        self._session: aiohttp.ClientSession | None = None      # Mihomo + subscription
+        self._tg_session: aiohttp.ClientSession | None = None   # Telegram (optionally via SOCKS)
         self._stop = asyncio.Event()
 
     # ------------------------------------------------------------------
@@ -29,8 +31,9 @@ class VlessMonDaemon:
         logger.info("VLESS monitor daemon starting")
 
         self._session = aiohttp.ClientSession()
+        self._tg_session = self._make_tg_session()
         mihomo = MihomoClient(self._cfg, self._session)
-        telegram = TelegramNotifier(self._cfg, self._session)
+        telegram = TelegramNotifier(self._cfg, self._tg_session)
         cfg_mgr = MihomoConfigManager(self._cfg)
         monitor = Monitor(self._cfg, self._db, mihomo, telegram)
 
@@ -57,6 +60,15 @@ class VlessMonDaemon:
         await asyncio.gather(*tasks, return_exceptions=True)
 
         await self._shutdown()
+
+    def _make_tg_session(self) -> aiohttp.ClientSession:
+        proxy_url = self._cfg.telegram_socks_proxy
+        if proxy_url:
+            connector = ProxyConnector.from_url(proxy_url, rdns=True)
+            logger.info(f"Telegram session: SOCKS proxy {proxy_url}")
+        else:
+            connector = aiohttp.TCPConnector()
+        return aiohttp.ClientSession(connector=connector)
 
     def request_stop(self) -> None:
         """Called from signal handlers to trigger graceful shutdown."""
@@ -136,4 +148,6 @@ class VlessMonDaemon:
         await self._db.close()
         if self._session and not self._session.closed:
             await self._session.close()
+        if self._tg_session and not self._tg_session.closed:
+            await self._tg_session.close()
         logger.info("VLESS monitor stopped")

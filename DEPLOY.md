@@ -85,6 +85,7 @@ sudo systemctl stop vless-monitor
 | `MIHOMO_CONFIG_PATH` | `/etc/mihomo/config.yaml` | Path for full config reload (fallback) |
 | `TELEGRAM_BOT_TOKEN` | _(required)_ | Bot token from @BotFather |
 | `TELEGRAM_CHAT_ID` | _(required)_ | Target chat/channel ID |
+| `TELEGRAM_SOCKS_PROXY` | _(empty)_ | SOCKS5/4 proxy for Telegram, e.g. `socks5://host:1080` |
 | `SUBSCRIPTION_URL` | _(required)_ | VLESS subscription URL |
 | `SUBSCRIPTION_INTERVAL` | `1800` | Seconds between subscription refreshes |
 | `CHECK_INTERVAL` | `30` | Seconds between monitoring rounds |

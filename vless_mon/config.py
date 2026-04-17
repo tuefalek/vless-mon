@@ -18,6 +18,9 @@ class Config:
     # Telegram
     telegram_bot_token: str
     telegram_chat_id: str
+    # Optional SOCKS5/SOCKS4 proxy for outbound Telegram requests.
+    # Format: socks5://user:pass@host:port  or  socks5://host:port
+    telegram_socks_proxy: str
 
     # Subscription
     subscription_url: str
@@ -48,6 +51,7 @@ class Config:
             ),
             telegram_bot_token=os.getenv("TELEGRAM_BOT_TOKEN", ""),
             telegram_chat_id=os.getenv("TELEGRAM_CHAT_ID", ""),
+            telegram_socks_proxy=os.getenv("TELEGRAM_SOCKS_PROXY", ""),
             subscription_url=os.getenv("SUBSCRIPTION_URL", ""),
             subscription_interval=int(os.getenv("SUBSCRIPTION_INTERVAL", "1800")),
             check_interval=int(os.getenv("CHECK_INTERVAL", "30")),
